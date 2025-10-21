@@ -1,4 +1,5 @@
 const express = require("express");
+require("dotenv").config();
 
 const connectDB = require("./config/database");
 //connectDB is a async function and it will return promise
@@ -22,7 +23,7 @@ app.post("/userPost", async (req, res) => {
 connectDB()
   .then(() => {
     console.log("DB connected");
-    const port = 4000;
+    const port = process.env.PORT;
     app.listen(port, () => {
       console.log("Listening from localhost");
     });
