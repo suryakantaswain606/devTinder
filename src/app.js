@@ -9,9 +9,12 @@ const User = require("./models/user");
 
 const app = express();
 
+//Middleware to parse JSON to object and store to req.body
+app.use(express.json());
+
 app.post("/userPost", async (req, res) => {
   try {
-    const user = new User({ firstName: "Surya", lastName: "kanta", age: 21 });
+    const user = new User(req.body);
     await user.save();
     res.send("userPost added successfully");
   } catch (err) {
