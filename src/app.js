@@ -1,5 +1,7 @@
 const express = require("express");
 require("dotenv").config();
+const validateSignUp = require("../src/utils/validation");
+const bcrypt = require("bcrypt");
 
 const connectDB = require("./config/database");
 //connectDB is a async function and it will return promise
@@ -104,16 +106,49 @@ app.patch("/user/:userId", async (req, res) => {
   }
 });
 
-app.post("/userPost", async (req, res) => {
+app.post("/signUp", async (req, res) => {
   try {
     const data = req.body;
-    const user = new User(data);
+
+    validateSignUp(data);
+
+    const { firstName, lastName, password, emailId } = data;
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const user = new User({ firstName, lastName, emailId, password: hash });
 
     if (data?.skills?.length > 10) {
       throw new Error("Skills can't be more than 10");
     }
     await user.save();
     res.send("userPost added successfully");
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+app.post("/login", async (req, res) => {
+  try {
+    const { emailId, password } = req.body;
+
+    if (!emailId || !password) {
+      throw new Error("Email and password are required");
+    }
+
+    const user = await User.findOne({ emailId }).select("+password");
+    if (!user) {
+      throw new Error("Email not present in DB");
+    }
+
+    const isPasswordExist = await bcrypt.compare(password, user.password);
+    console.log(isPasswordExist);
+
+    if (!isPasswordExist) {
+      throw new Error("Password is wrong");
+    }
+
+    res.send("LogIn Successful");
   } catch (err) {
     res.status(500).send(err.message);
   }
