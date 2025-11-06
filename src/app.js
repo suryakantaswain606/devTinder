@@ -49,24 +49,46 @@ app.get("/feed", async (req, res) => {
   }
 });
 
-app.patch("/user", async (req, res) => {
+app.patch("/user/:userId", async (req, res) => {
   try {
     // const userId = req.body.userId;
     const emailId = req.body.emailId;
     const age = req.body.age;
     const data = req.body;
 
-    // const user = await User.findByIdAndUpdate(userId, data, {
-    //   new: "true",
-    // });
+    const userId = req.params?.userId;
+
+    const allowedChangeFields = [
+      "age",
+      "firstName",
+      "lastName",
+      "gender",
+      "objective",
+      "skills",
+    ];
+
+    const isAllowed = Object.keys(data).every((k) =>
+      allowedChangeFields.includes(k)
+    );
+
+    if (!isAllowed) {
+      throw new Error("field change not allowed");
+    }
+
+    if (data?.skills?.length > 10) {
+      throw new Error("Skills can't be more than 10");
+    }
+    const user = await User.findByIdAndUpdate(userId, data, {
+      new: "true",
+    });
 
     // const user = await User.findOneAndUpdate({ _id: userId }, data, {
     //   new: true,
     // });
 
-    const user = await User.findOneAndUpdate({ emailId: emailId }, data, {
-      new: true,
-    });
+    // const user = await User.findOneAndUpdate({ emailId: emailId }, data, {
+    //   new: true,
+    // });
 
     // const user = await User.updateMany({ age: age }, data, {
     //   runValidators: true,
@@ -78,14 +100,18 @@ app.patch("/user", async (req, res) => {
 
     res.status(200).send(user);
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Error updating user");
+    res.status(500).send(err.message);
   }
 });
 
 app.post("/userPost", async (req, res) => {
   try {
-    const user = new User(req.body);
+    const data = req.body;
+    const user = new User(data);
+
+    if (data?.skills?.length > 10) {
+      throw new Error("Skills can't be more than 10");
+    }
     await user.save();
     res.send("userPost added successfully");
   } catch (err) {
