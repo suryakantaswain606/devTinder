@@ -12,7 +12,7 @@ const userAuth = async (req, res, next) => {
     const validated = jwt.verify(token, process.env.JWT_SECRET);
 
     const { _id } = validated;
-    const user = await User.findById(_id);
+    const user = await User.findById(_id).select("+password");
 
     if (!user) {
       throw new Error("No user in DB");
