@@ -2,6 +2,9 @@ const express = require("express");
 require("dotenv").config();
 const validateSignUp = require("../src/utils/validation");
 const bcrypt = require("bcrypt");
+const cookieParser = require("cookie-parser");
+const jwt = require("jsonwebtoken");
+const userAuth = require("./middlewares/auth");
 
 const connectDB = require("./config/database");
 //connectDB is a async function and it will return promise
@@ -14,10 +17,12 @@ const app = express();
 //Middleware to parse JSON to object and store to req.body
 app.use(express.json());
 
+app.use(cookieParser());
+
 app.get("/user", async (req, res) => {
   try {
     const user = await User.findOne({ emailId: req.body.email });
-    if (user.length === 0) {
+    if (!user) {
       return res.status(404).send("user not found");
     }
     res.send(user);
@@ -81,7 +86,7 @@ app.patch("/user/:userId", async (req, res) => {
       throw new Error("Skills can't be more than 10");
     }
     const user = await User.findByIdAndUpdate(userId, data, {
-      new: "true",
+      new: true,
     });
 
     // const user = await User.findOneAndUpdate({ _id: userId }, data, {
@@ -112,17 +117,34 @@ app.post("/signUp", async (req, res) => {
 
     validateSignUp(data);
 
-    const { firstName, lastName, password, emailId } = data;
-
-    const hash = await bcrypt.hash(password, 10);
-
-    const user = new User({ firstName, lastName, emailId, password: hash });
-
     if (data?.skills?.length > 10) {
       throw new Error("Skills can't be more than 10");
     }
+
+    const { firstName, lastName, password, emailId, skills } = data;
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const user = new User({
+      firstName,
+      lastName,
+      emailId,
+      password: hash,
+      skills,
+    });
+
     await user.save();
-    res.send("userPost added successfully");
+
+    //offloading jwt token assign logic to userSchema
+    const token = user.getJWT();
+    res.cookie("token", token, {
+      httpOnly: true, // prevents client-side JS access (XSS protection)
+      sameSite: "strict", // prevents cross-site request forgery (CSRF)
+      secure: process.env.NODE_ENV === "production", // only send cookie over HTTPS in production
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    return res.send("new user added successfully");
   } catch (err) {
     res.status(500).send(err.message);
   }
@@ -141,14 +163,31 @@ app.post("/login", async (req, res) => {
       throw new Error("Email not present in DB");
     }
 
-    const isPasswordExist = await bcrypt.compare(password, user.password);
-    console.log(isPasswordExist);
+    //offloading bcrypt compare logic to userSchema
+    const isPasswordExist = await user.comparePassword(password);
 
     if (!isPasswordExist) {
       throw new Error("Password is wrong");
     }
 
-    res.send("LogIn Successful");
+    //offloading jwt token assign logic to userSchema
+    const token = user.getJWT();
+    res.cookie("token", token, {
+      httpOnly: true, // prevents client-side JS access (XSS protection)
+      sameSite: "strict", // prevents cross-site request forgery (CSRF)
+      secure: process.env.NODE_ENV === "production", // only send cookie over HTTPS in production
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+    return res.send("Login Successful");
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+app.get("/profile", userAuth, async (req, res) => {
+  try {
+    const { user } = req;
+    res.send(user);
   } catch (err) {
     res.status(500).send(err.message);
   }

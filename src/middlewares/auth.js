@@ -1,16 +1,42 @@
-const adminAuth = (req, res, next) => {
-  console.log("Admin auth is getting checked");
-  const token = "xyz";
+const jwt = require("jsonwebtoken");
+const User = require("../models/user");
 
-  req.isAdminAuthorized = token == "xyz";
-  req.isAdminAuthorized ? next() : res.status(401).send("admin unauthorized");
+const userAuth = async (req, res, next) => {
+  try {
+    const { token } = req.cookies;
+
+    if (!token) {
+      throw new Error("Invalid token. Please, Login");
+    }
+
+    const validated = jwt.verify(token, process.env.JWT_SECRET);
+
+    const { _id } = validated;
+    const user = await User.findById(_id);
+
+    if (!user) {
+      throw new Error("No user in DB");
+    }
+
+    req.user = user;
+
+    next();
+  } catch (err) {
+    if (err.name === "TokenExpiredError") {
+      return res.status(401).send("Session expired. Please log in again.");
+    }
+
+    if (err.name === "JsonWebTokenError") {
+      return res.status(401).send("Invalid token. Please log in again.");
+    }
+
+    if (err.name === "NotBeforeError") {
+      return res.status(401).send("Token not active yet. Try again later.");
+    }
+
+    console.error("Auth Middleware Error:", err);
+    return res.status(500).send("Authentication failed. Please try again.");
+  }
 };
-const userAuth = (req, res, next) => {
-  console.log("User auth is getting checked");
-  const token = "xyz";
 
-  req.isUserAuthorized = token == "xyz";
-  req.isUserAuthorized ? next() : res.status(401).send("user unauthorized");
-};
-
-module.exports = { adminAuth, userAuth };
+module.exports = userAuth;
