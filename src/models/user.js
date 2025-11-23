@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema(
   {
     firstName: { type: String, required: true },
     lastName: { type: String },
+
+    // email field validation
     emailId: {
       type: String,
       unique: true,
@@ -20,17 +22,20 @@ const userSchema = new mongoose.Schema(
         }
       },
     },
+
     age: { type: Number, min: 1 },
+
+    // gender enum
     gender: {
       type: String,
-      validate(value) {
-        if (!["male", "female", "other"].includes(value)) {
-          throw new Error("add either Male or Female or Other");
-        }
-      },
+      required: true,
+      enum: ["male", "female", "other"],
     },
+
     objective: { type: String, default: "nodejs learning" },
     skills: { type: [String] },
+
+    // profile image validation
     photoURL: {
       type: String,
       validate(value) {
@@ -41,28 +46,37 @@ const userSchema = new mongoose.Schema(
       default:
         "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS_g_7YVzERozXI_mfnbSPkggiXqlljwtCQXw&s",
     },
-    password: { type: String, select: false, required: true },
+
+    password: { type: String, required: true },
   },
   { timestamps: true }
 );
 
+// hash password before save
+userSchema.pre("save", async function (next) {
+  const user = this;
+
+  // only hash when password is newly set/changed
+  if (!user.isModified("password")) return next();
+
+  user.password = await bcrypt.hash(user.password, 10);
+  next();
+});
+
+// generate JWT token
 userSchema.methods.getJWT = function () {
   const user = this;
-  const token = jwt.sign({ _id: user.id }, process.env.JWT_SECRET, {
+
+  return jwt.sign({ _id: user.id }, process.env.JWT_SECRET, {
     expiresIn: "7d",
   });
-
-  return token;
 };
 
+// compare entered password with db password
 userSchema.methods.comparePassword = async function (enteredPassword) {
   const user = this;
-  const dbHashedPassword = this.password;
-  const isPasswordExist = await bcrypt.compare(
-    enteredPassword,
-    dbHashedPassword
-  );
-  return isPasswordExist;
+
+  return await bcrypt.compare(enteredPassword, user.password);
 };
 
 const User = mongoose.model("User", userSchema);

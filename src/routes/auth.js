@@ -6,45 +6,49 @@ const User = require("../models/user");
 
 const authRouter = express.Router();
 
+// user signup
 authRouter.post("/signUp", async (req, res) => {
   try {
     const data = req.body;
 
-    validateSignUp(data);
+    validateSignUp(data); // validate signup data
 
     if (data?.skills?.length > 10) {
       throw new Error("Skills can't be more than 10");
     }
 
-    const { firstName, lastName, password, emailId, skills } = data;
+    const { firstName, lastName, password, emailId, skills, gender } = data;
 
-    const hash = await bcrypt.hash(password, 10);
-
+    // create new user document
     const user = new User({
       firstName,
       lastName,
       emailId,
-      password: hash,
+      password,
       skills,
+      gender,
     });
 
     await user.save();
 
-    //offloading jwt token assign logic to userSchema
+    // generate JWT token (method in user model)
     const token = user.getJWT();
+
+    // set cookie
     res.cookie("token", token, {
-      httpOnly: true, // prevents client-side JS access (XSS protection)
-      sameSite: "strict", // prevents cross-site request forgery (CSRF)
-      secure: process.env.NODE_ENV === "production", // only send cookie over HTTPS in production
+      httpOnly: true,
+      sameSite: "strict",
+      secure: process.env.NODE_ENV === "production",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    return res.send("new user added successfully");
+    res.send("new user added successfully");
   } catch (err) {
     res.status(500).send(err.message);
   }
 });
 
+// user login
 authRouter.post("/login", async (req, res) => {
   try {
     const { emailId, password } = req.body;
@@ -53,40 +57,47 @@ authRouter.post("/login", async (req, res) => {
       throw new Error("Email and password are required");
     }
 
+    // find user and include password field
     const user = await User.findOne({ emailId }).select("+password");
+
     if (!user) {
       throw new Error("Email not present in DB");
     }
 
-    //offloading bcrypt compare logic to userSchema
+    // check password (method in user model)
     const isPasswordExist = await user.comparePassword(password);
 
     if (!isPasswordExist) {
       throw new Error("Password is wrong");
     }
 
-    //offloading jwt token assign logic to userSchema
+    // generate JWT token
     const token = user.getJWT();
+
+    // set cookie
     res.cookie("token", token, {
-      httpOnly: true, // prevents client-side JS access (XSS protection)
-      sameSite: "strict", // prevents cross-site request forgery (CSRF)
-      secure: process.env.NODE_ENV === "production", // only send cookie over HTTPS in production
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      httpOnly: true, // prevents JS access to cookie (XSS protection)
+      sameSite: "strict", // blocks cross-site cookie sending (CSRF protection)
+      secure: process.env.NODE_ENV === "production", // HTTPS only in production
+      maxAge: 7 * 24 * 60 * 60 * 1000, // cookie valid for 7 days
     });
-    return res.send("Login Successful");
+
+    res.send("Login Successful");
   } catch (err) {
     res.status(500).send(err.message);
   }
 });
 
+// user logout
 authRouter.post("/logout", (req, res) => {
+  // clear auth cookie
   res.clearCookie("token", {
     httpOnly: true,
     sameSite: "strict",
     secure: process.env.NODE_ENV === "production",
   });
 
-  return res.send("Logout successful");
+  res.send("Logout successful");
 });
 
 module.exports = authRouter;

@@ -3,25 +3,29 @@ const User = require("../models/user");
 
 const userAuth = async (req, res, next) => {
   try {
-    const { token } = req.cookies;
+    const { token } = req.cookies; // get token from cookie
 
     if (!token) {
       throw new Error("Invalid token. Please, Login");
     }
 
+    // verify token
     const validated = jwt.verify(token, process.env.JWT_SECRET);
 
     const { _id } = validated;
+
+    // find user from token payload
     const user = await User.findById(_id).select("+password");
 
     if (!user) {
       throw new Error("No user in DB");
     }
 
-    req.user = user;
+    req.user = user; // attach user to request
 
-    next();
+    next(); // go to next middleware/route
   } catch (err) {
+    // handle token-specific errors
     if (err.name === "TokenExpiredError") {
       return res.status(401).send("Session expired. Please log in again.");
     }
