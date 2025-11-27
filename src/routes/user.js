@@ -68,36 +68,59 @@ userRouter.get("/feed", userAuth, async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
 
-    // fields that we want to show in feed (keeping private details hidden)
+    // Pagination parameters (always convert to numbers)
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    if (limit > 50) {
+      throw new Error("Don't be greedy!");
+    }
+
+    const skip = (page - 1) * limit;
+
+    // fields to show publicly in the feed
     const publicUserFields = "firstName lastName photoURL age";
 
-    // 1. Fetch all connection requests where logged-in user is either the sender or receiver
+    // 1️⃣ Fetch all connection relations of logged-in user
     const userConnections = await ConnectionRequestModel.find({
       $or: [{ fromUserId: loggedInUserId }, { toUserId: loggedInUserId }],
     }).select("fromUserId toUserId");
 
-    // 2. Create a Set of user IDs that should be hidden from the feed
+    // 2️⃣ Build a set of users to hide
     const excludedUserIds = new Set();
 
-    // Add both sides of all connection records
     userConnections.forEach((connection) => {
       excludedUserIds.add(connection.fromUserId.toString());
       excludedUserIds.add(connection.toUserId.toString());
     });
 
-    // Always hide the logged-in user themselves
+    // Always hide yourself
     excludedUserIds.add(loggedInUserId.toString());
 
-    // Convert Set → Array for MongoDB query
     const excludedIdsArray = [...excludedUserIds];
 
-    // 3. Fetch all users NOT in the excluded list
+    // 3️⃣ Total count for pagination
+    const totalUsers = await User.countDocuments({
+      _id: { $nin: excludedIdsArray },
+    });
+
+    // 4️⃣ Fetch feed users (paginated)
     const feedUsers = await User.find({
       _id: { $nin: excludedIdsArray },
-    }).select(publicUserFields);
+    })
+      .select(publicUserFields)
+      .sort({ _id: 1 }) // important for stable pagination
+      .skip(skip)
+      .limit(limit);
 
-    // 4. Send final feed list
-    res.status(200).send(feedUsers);
+    // 5️⃣ Respond with feed + pagination metadata
+    res.status(200).json({
+      page,
+      limit,
+      totalUsers,
+      totalPages: Math.ceil(totalUsers / limit),
+      feed: feedUsers,
+    });
   } catch (err) {
     res.status(500).send(err.message);
   }
