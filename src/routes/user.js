@@ -1,6 +1,7 @@
 const express = require("express");
 const userAuth = require("../middlewares/auth");
 const ConnectionRequestModel = require("../models/connectionRequest");
+const User = require("../models/user");
 const userRouter = express.Router();
 
 // get all received requests
@@ -60,6 +61,45 @@ userRouter.get("/user/connections", userAuth, async (req, res) => {
     res.status(200).json({ connections: finalConnections });
   } catch (err) {
     return res.status(500).json({ error: err.message });
+  }
+});
+
+userRouter.get("/feed", userAuth, async (req, res) => {
+  try {
+    const loggedInUserId = req.user._id;
+
+    // fields that we want to show in feed (keeping private details hidden)
+    const publicUserFields = "firstName lastName photoURL age";
+
+    // 1. Fetch all connection requests where logged-in user is either the sender or receiver
+    const userConnections = await ConnectionRequestModel.find({
+      $or: [{ fromUserId: loggedInUserId }, { toUserId: loggedInUserId }],
+    }).select("fromUserId toUserId");
+
+    // 2. Create a Set of user IDs that should be hidden from the feed
+    const excludedUserIds = new Set();
+
+    // Add both sides of all connection records
+    userConnections.forEach((connection) => {
+      excludedUserIds.add(connection.fromUserId.toString());
+      excludedUserIds.add(connection.toUserId.toString());
+    });
+
+    // Always hide the logged-in user themselves
+    excludedUserIds.add(loggedInUserId.toString());
+
+    // Convert Set → Array for MongoDB query
+    const excludedIdsArray = [...excludedUserIds];
+
+    // 3. Fetch all users NOT in the excluded list
+    const feedUsers = await User.find({
+      _id: { $nin: excludedIdsArray },
+    }).select(publicUserFields);
+
+    // 4. Send final feed list
+    res.status(200).send(feedUsers);
+  } catch (err) {
+    res.status(500).send(err.message);
   }
 });
 
