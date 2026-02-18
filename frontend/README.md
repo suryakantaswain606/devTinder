@@ -1,3 +1,4 @@
 - created a vite+react app.
 - removed unnecessary code created by vite.
 - using tailwind css with daisy UI.
+- implemented create-react-router.
